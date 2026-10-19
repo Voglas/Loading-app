@@ -126,14 +126,16 @@
         
         .tags-row { display: flex; gap: 6px; margin: 8px 0 10px 0; flex-wrap: wrap; }
         .tag-pill { font-size: 11px; background: var(--bg); padding: 3px 8px; border-radius: 6px; color: #48484a; font-weight: 500; }
+        .tag-pill.highlight { background: #e3f2fd; color: #0d47a1; font-weight: 600; }
         
-        .inputs-row { display: flex; gap: 8px; }
-        .field-group { flex: 1; }
+        .inputs-row { display: flex; gap: 8px; flex-direction: column; }
+        .field-group { width: 100%; }
         .field-group label { display: block; font-size: 10px; color: var(--subtext); text-transform: uppercase; margin-bottom: 3px; font-weight: 600; }
         .field-group input {
             width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
             font-size: 14px; box-sizing: border-box; background: #fff;
         }
+        .calc-preview { font-size: 12px; color: #007aff; margin-top: 4px; font-weight: 600; }
 
         .footer-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff;
@@ -171,7 +173,7 @@
 <div class="progress-box">
     <div class="stats-row">
         <span id="txtCount">0 / 0 завантажено</span>
-        <span id="txtWeight">0 / 0 кг</span>
+        <span id="txtWeight">0 / 0 кг (0 упаковок)</span>
     </div>
     <div class="progress-bg">
         <div class="progress-fill" id="progressFill"></div>
@@ -207,22 +209,45 @@ const defaultItems = [
   {"id": 16, "name": "Зимові жилети (A+B)", "cz": "Vesty zimní", "code": "VESTS W", "quality": "A+B", "plan": 100}
 ];
 
-let items = JSON.parse(localStorage.getItem('app_items_v5')) || defaultItems.map(i => ({
-    ...i, done: false, fact: i.plan, note: ''
+let items = JSON.parse(localStorage.getItem('app_items_v6')) || defaultItems.map(i => ({
+    ...i, done: false, formula: String(i.plan), note: ''
 }));
 
+function parseFormula(expr) {
+    if (!expr) return { total: 0, count: 0 };
+    const parts = String(expr).split('+').map(p => p.trim()).filter(p => p !== '');
+    let total = 0;
+    let count = 0;
+    parts.forEach(p => {
+        const val = parseFloat(p.replace(',', '.'));
+        if (!isNaN(val)) {
+            total += val;
+            count += 1;
+        }
+    });
+    return { total, count };
+}
+
 function saveState() {
-    localStorage.setItem('app_items_v5', JSON.stringify(items));
+    localStorage.setItem('app_items_v6', JSON.stringify(items));
     updateStats();
 }
 
 function updateStats() {
     const doneList = items.filter(i => i.done);
-    const doneWeight = doneList.reduce((acc, i) => acc + (parseFloat(i.fact) || 0), 0);
-    const totalWeight = items.reduce((acc, i) => acc + (parseFloat(i.plan) || 0), 0);
+    let doneWeight = 0;
+    let donePackages = 0;
+    
+    doneList.forEach(i => {
+        const parsed = parseFormula(i.formula);
+        doneWeight += parsed.total;
+        donePackages += parsed.count;
+    });
+
+    const totalPlanWeight = items.reduce((acc, i) => acc + (parseFloat(i.plan) || 0), 0);
 
     document.getElementById('txtCount').innerText = `${doneList.length} / ${items.length} завантажено`;
-    document.getElementById('txtWeight').innerText = `${doneWeight} / ${totalWeight} кг`;
+    document.getElementById('txtWeight').innerText = `${doneWeight} / ${totalPlanWeight} кг (${donePackages} упак.)`;
     const pct = items.length ? (doneList.length / items.length) * 100 : 0;
     document.getElementById('progressFill').style.width = pct + '%';
 }
@@ -248,6 +273,8 @@ function renderCards(filterText = '') {
             if (!matchName && !matchCz && !matchCode) return;
         }
 
+        const parsed = parseFormula(item.formula);
+
         const card = document.createElement('div');
         card.className = `item-card ${item.done ? 'done' : ''}`;
         card.innerHTML = `
@@ -262,11 +289,12 @@ function renderCards(filterText = '') {
                 <span class="tag-pill">Код: ${item.code || '---'}</span>
                 <span class="tag-pill">Сорт: ${item.quality || 'A'}</span>
                 <span class="tag-pill">План: ${item.plan} кг</span>
+                <span class="tag-pill highlight" id="tag-calc-${index}">Упаковок: ${parsed.count} (Всього: ${parsed.total} кг)</span>
             </div>
             <div class="inputs-row">
                 <div class="field-group">
-                    <label>Факт (кг)</label>
-                    <input type="number" value="${item.fact}" onchange="updateFact(${index}, this.value)">
+                    <label>Вага по упаковкам (напр. 30+30+30)</label>
+                    <input type="text" placeholder="напр. 30+25+20" value="${item.formula || ''}" oninput="updateFormula(${index}, this.value)">
                 </div>
                 <div class="field-group">
                     <label>№ Пачки / Примітка</label>
@@ -280,7 +308,17 @@ function renderCards(filterText = '') {
 }
 
 function toggleDone(idx) { items[idx].done = !items[idx].done; saveState(); renderCards(); }
-function updateFact(idx, val) { items[idx].fact = parseFloat(val) || 0; saveState(); }
+
+function updateFormula(idx, val) {
+    items[idx].formula = val;
+    const parsed = parseFormula(val);
+    const tag = document.getElementById(`tag-calc-${idx}`);
+    if (tag) {
+        tag.innerText = `Упаковок: ${parsed.count} (Всього: ${parsed.total} кг)`;
+    }
+    saveState();
+}
+
 function updateNote(idx, val) { items[idx].note = val; saveState(); }
 function filterItems(val) { renderCards(val); }
 
@@ -354,7 +392,7 @@ function parseRowsToItems(rows) {
                 quality: quality || 'A',
                 plan: plan,
                 done: false,
-                fact: plan,
+                formula: String(plan),
                 note: ''
             });
         }
@@ -433,18 +471,27 @@ function importGoogleSheets() {
 }
 
 function exportResult() {
-    const exportData = items.map((item, index) => ({
-        "№": index + 1,
-        "Статус": item.done ? "Завантажено" : "В очікуванні",
-        "Назва товару": item.name,
-        "Назва (CZ)": item.cz || "",
-        "Код товару": item.code,
-        "Сорт / Якість": item.quality,
-        "План (кг)": item.plan,
-        "Факт завантажено (кг)": item.done ? item.fact : 0,
-        "Різниця (кг)": item.done ? (item.fact - item.plan) : -item.plan,
-        "№ Пачки / Примітки": item.note || ""
-    }));
+    const exportData = items.map((item, index) => {
+        const parsed = parseFormula(item.formula);
+        const factWeight = item.done ? parsed.total : 0;
+        const packagesCount = item.done ? parsed.count : 0;
+        const diffWeight = item.done ? (parsed.total - item.plan) : -item.plan;
+
+        return {
+            "№": index + 1,
+            "Статус": item.done ? "Завантажено" : "В очікуванні",
+            "Назва товару": item.name,
+            "Назва (CZ)": item.cz || "",
+            "Код товару": item.code,
+            "Сорт / Якість": item.quality,
+            "План (кг)": item.plan,
+            "Введено по упаковкам (кг)": item.done ? item.formula : "",
+            "Кількість упаковок (шт)": packagesCount,
+            "Факт завантажено (кг)": factWeight,
+            "Різниця (кг)": diffWeight,
+            "№ Пачки / Примітки": item.note || ""
+        };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -454,7 +501,7 @@ function exportResult() {
 
 function resetForm() {
     if (confirm("Скинути всі відмітки та завантажений шаблон до початкового?")) {
-        items = defaultItems.map(i => ({ ...i, done: false, fact: i.plan, note: '' }));
+        items = defaultItems.map(i => ({ ...i, done: false, formula: String(i.plan), note: '' }));
         saveState();
         renderCards();
     }
