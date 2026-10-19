@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Додаток Завантаження (iPhone)</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg: #f2f2f7;
+            --card-bg: #ffffff;
+            --text: #1c1c1e;
+            --subtext: #8e8e93;
+            --primary: #007aff;
+            --success: #34c759;
+            --success-bg: #e2f8e9;
+            --border: #e5e5ea;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 12px;
+            padding-bottom: 90px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .header {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 8px 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--border);
+        }
+        h1 { font-size: 18px; margin: 0 0 4px 0; font-weight: 700; }
+        .upload-card {
+            background: var(--card-bg);
+            border: 2px dashed var(--primary);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .upload-btns {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .btn-upload {
+            background: var(--primary);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-upload.google { background: #34a853; }
+        input[type="file"] { display: none; }
+        
+        .alert-box {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            display: none;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-box.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        .progress-box {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .stats-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .progress-bg { background: var(--border); border-radius: 8px; height: 10px; overflow: hidden; }
+        .progress-fill { background: var(--success); height: 100%; width: 0%; transition: width 0.3s ease; }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-size: 14px;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+            background: #fff;
+        }
+
+        .item-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .item-card.done { background: var(--success-bg); border-color: var(--success); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .card-title { font-weight: 600; font-size: 15px; flex-grow: 1; padding-right: 8px; line-height: 1.3; }
+        .card-subtitle { font-size: 12px; color: var(--subtext); margin-top: 2px; }
+        
+        .check-circle {
+            width: 32px; height: 32px; border-radius: 50%; border: 2px solid #c7c7cc;
+            background: #fff; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; flex-shrink: 0; font-weight: bold; color: transparent; font-size: 18px;
+        }
+        .item-card.done .check-circle { background: var(--success); border-color: var(--success); color: white; }
+        
+        .tags-row { display: flex; gap: 6px; margin: 8px 0 10px 0; flex-wrap: wrap; }
+        .tag-pill { font-size: 11px; background: var(--bg); padding: 3px 8px; border-radius: 6px; color: #48484a; font-weight: 500; }
+        
+        .inputs-row { display: flex; gap: 8px; }
+        .field-group { flex: 1; }
+        .field-group label { display: block; font-size: 10px; color: var(--subtext); text-transform: uppercase; margin-bottom: 3px; font-weight: 600; }
+        .field-group input {
+            width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+            font-size: 14px; box-sizing: border-box; background: #fff;
+        }
+
+        .footer-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff;
+            padding: 10px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 200;
+        }
+        .action-btn { flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; }
+        .btn-export { background: var(--success); color: white; }
+        .btn-reset { background: #e5e5ea; color: #1c1c1e; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>📦 Завантаження товарів (Форма)</h1>
+</div>
+
+<div class="upload-card">
+    <div style="font-size: 14px; font-weight: 600;">📁 Завантажити файл замовлення / таблиці</div>
+    <div style="font-size: 11px; color: #8e8e93; margin-top: 2px;">Підтримує .XLS, .XLSX, .CSV та Google Таблиці</div>
+    
+    <div class="upload-btns">
+        <label class="btn-upload">
+            📂 Вибрати файл Excel / CSV
+            <input type="file" id="fileInput" accept=".xls, .xlsx, .csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv" onchange="handleFileSelect(event)">
+        </label>
+        <button class="btn-upload google" onclick="importGoogleSheets()">
+            🌐 За посиланням Google Таблиці
+        </button>
+    </div>
+</div>
+
+<div id="alertBox" class="alert-box"></div>
+
+<div class="progress-box">
+    <div class="stats-row">
+        <span id="txtCount">0 / 0 завантажено</span>
+        <span id="txtWeight">0 / 0 кг</span>
+    </div>
+    <div class="progress-bg">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+</div>
+
+<input type="text" class="search-input" placeholder="🔍 Пошук за назвою або кодом..." oninput="filterItems(this.value)">
+
+<div id="cardsList"></div>
+
+<div class="footer-bar">
+    <button class="action-btn btn-reset" onclick="resetForm()">Скинути</button>
+    <button class="action-btn btn-export" onclick="exportResult()">📥 Завантажити підсумкову Google Таблицю (.xlsx)</button>
+</div>
+
+<script>
+const defaultItems = [
+  {"id": 1, "name": "Зимові жіночі та чоловічі куртки", "cz": "Bundy dámské a pánské zimní", "code": "AHM", "quality": "A", "plan": 100},
+  {"id": 2, "name": "Одяг для собак", "cz": "Oblečení pro psy", "code": "DOG MIX", "quality": "K+A+B", "plan": 20},
+  {"id": 3, "name": "Світшоти", "cz": "Mikiny", "code": "PEM", "quality": "B", "plan": 30},
+  {"id": 4, "name": "Флісові світшоти", "cz": "Mikiny flauš", "code": "PEM FLEECE", "quality": "A+B", "plan": 100},
+  {"id": 5, "name": "Світшоти-кенгуру", "cz": "Mikiny klokánky", "code": "PEM HOOD", "quality": "B", "plan": 100},
+  {"id": 6, "name": "Жіночі нічні сорочки, піжами", "cz": "Košile dámské noční, pyžama", "code": "PJF", "quality": "A", "plan": 100},
+  {"id": 7, "name": "Халати", "cz": "Župany", "code": "RBM", "quality": "K+A", "plan": 80},
+  {"id": 8, "name": "Зимові домашні капці", "cz": "Boty pantofle zimní", "code": "SH SLIPPER W", "quality": "K+A+B", "plan": 200},
+  {"id": 9, "name": "Зимове взуття", "cz": "Boty zimní", "code": "SH W", "quality": "A", "plan": 30},
+  {"id": 10, "name": "Робоче взуття", "cz": "Boty pracovní", "code": "SH WORK", "quality": "K+A", "plan": 50},
+  {"id": 11, "name": "Спортивний одяг", "cz": "Oblečení sportovní", "code": "SME", "quality": "A", "plan": 90},
+  {"id": 12, "name": "Футбольні джерсі", "cz": "Dresy fotbalové", "code": "TSEFO", "quality": "K+A", "plan": 20},
+  {"id": 13, "name": "Футболки", "cz": "Trička", "code": "TSEM", "quality": "A+B", "plan": 90},
+  {"id": 14, "name": "Футболки XXL", "cz": "Trička XXL", "code": "TSEM XXL", "quality": "B", "plan": 60},
+  {"id": 15, "name": "Зимові жилети (K+A)", "cz": "Vesty zimní", "code": "VESTS W", "quality": "K+A", "plan": 100},
+  {"id": 16, "name": "Зимові жилети (A+B)", "cz": "Vesty zimní", "code": "VESTS W", "quality": "A+B", "plan": 100}
+];
+
+let items = JSON.parse(localStorage.getItem('app_items_v5')) || defaultItems.map(i => ({
+    ...i, done: false, fact: i.plan, note: ''
+}));
+
+function saveState() {
+    localStorage.setItem('app_items_v5', JSON.stringify(items));
+    updateStats();
+}
+
+function updateStats() {
+    const doneList = items.filter(i => i.done);
+    const doneWeight = doneList.reduce((acc, i) => acc + (parseFloat(i.fact) || 0), 0);
+    const totalWeight = items.reduce((acc, i) => acc + (parseFloat(i.plan) || 0), 0);
+
+    document.getElementById('txtCount').innerText = `${doneList.length} / ${items.length} завантажено`;
+    document.getElementById('txtWeight').innerText = `${doneWeight} / ${totalWeight} кг`;
+    const pct = items.length ? (doneList.length / items.length) * 100 : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+}
+
+function showAlert(msg, isError = false) {
+    const box = document.getElementById('alertBox');
+    box.innerText = msg;
+    box.className = 'alert-box' + (isError ? ' error' : '');
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 6000);
+}
+
+function renderCards(filterText = '') {
+    const container = document.getElementById('cardsList');
+    container.innerHTML = '';
+
+    items.forEach((item, index) => {
+        if (filterText) {
+            const q = filterText.toLowerCase();
+            const matchName = item.name && item.name.toLowerCase().includes(q);
+            const matchCz = item.cz && item.cz.toLowerCase().includes(q);
+            const matchCode = item.code && String(item.code).toLowerCase().includes(q);
+            if (!matchName && !matchCz && !matchCode) return;
+        }
+
+        const card = document.createElement('div');
+        card.className = `item-card ${item.done ? 'done' : ''}`;
+        card.innerHTML = `
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${item.name || item.cz}</div>
+                    ${item.cz && item.cz !== item.name ? `<div class="card-subtitle">${item.cz}</div>` : ''}
+                </div>
+                <div class="check-circle" onclick="toggleDone(${index})">✓</div>
+            </div>
+            <div class="tags-row">
+                <span class="tag-pill">Код: ${item.code || '---'}</span>
+                <span class="tag-pill">Сорт: ${item.quality || 'A'}</span>
+                <span class="tag-pill">План: ${item.plan} кг</span>
+            </div>
+            <div class="inputs-row">
+                <div class="field-group">
+                    <label>Факт (кг)</label>
+                    <input type="number" value="${item.fact}" onchange="updateFact(${index}, this.value)">
+                </div>
+                <div class="field-group">
+                    <label>№ Пачки / Примітка</label>
+                    <input type="text" placeholder="наприклад, Мішок #2" value="${item.note || ''}" onchange="updateNote(${index}, this.value)">
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+    updateStats();
+}
+
+function toggleDone(idx) { items[idx].done = !items[idx].done; saveState(); renderCards(); }
+function updateFact(idx, val) { items[idx].fact = parseFloat(val) || 0; saveState(); }
+function updateNote(idx, val) { items[idx].note = val; saveState(); }
+function filterItems(val) { renderCards(val); }
+
+function parseRowsToItems(rows) {
+    let headerIdx = -1;
+    let colMap = {};
+
+    rows.forEach((row, rIdx) => {
+        if (headerIdx !== -1) return;
+        if (!row) return;
+
+        const strRow = row.map(c => c ? String(c).toUpperCase().trim() : '');
+        
+        if (strRow.some(s => s.includes('NÁZEV') || s.includes('НАЗВА') || s.includes('MNOŽSTVÍ') || s.includes('KOD') || s.includes('НАИМЕНОВАНИЕ'))) {
+            headerIdx = rIdx;
+            strRow.forEach((s, cIdx) => {
+                if (s.includes('NÁZEV') || s.includes('НАЗВА') || s.includes('НАИМЕНОВАНИЕ')) {
+                    colMap.cz = cIdx;
+                    if (cIdx + 1 < strRow.length) colMap.ua = cIdx + 1;
+                } else if (s.includes('KOD') || s.includes('КОД') || s.includes('CODE')) {
+                    colMap.code = cIdx;
+                } else if (s.includes('KVALITA') || s.includes('СОРТ') || s.includes('QUALITY')) {
+                    colMap.quality = cIdx;
+                } else if (s.includes('MNOŽSTVÍ') || s.includes('MNOZSTVI') || s.includes('КІЛЬКІСТЬ') || s.includes('КОЛИЧЕСТВО') || s.includes('QTY')) {
+                    colMap.qty = cIdx;
+                }
+            });
+        }
+    });
+
+    let newItems = [];
+    let startRow = headerIdx !== -1 ? headerIdx + 1 : 0;
+
+    rows.slice(startRow).forEach((row, idx) => {
+        if (!row || row.length < 2) return;
+
+        let nameUa = '', nameCz = '', code = '---', quality = 'A', plan = 0;
+
+        if (headerIdx !== -1) {
+            nameCz = colMap.cz !== undefined && row[colMap.cz] ? String(row[colMap.cz]).trim() : '';
+            nameUa = colMap.ua !== undefined && row[colMap.ua] ? String(row[colMap.ua]).trim() : '';
+            code = colMap.code !== undefined && row[colMap.code] ? String(row[colMap.code]).trim() : '---';
+            quality = colMap.quality !== undefined && row[colMap.quality] ? String(row[colMap.quality]).trim() : 'A';
+            
+            let rawQty = colMap.qty !== undefined ? row[colMap.qty] : null;
+            plan = parseFloat(rawQty) || 0;
+        } else {
+            row.forEach(cell => {
+                if (cell === null || cell === undefined) return;
+                let s = String(cell).trim();
+                if (!s) return;
+
+                if (!isNaN(cell) && parseFloat(cell) > 0) {
+                    if (plan === 0) plan = parseFloat(cell);
+                } else if (s.length >= 3 && !nameCz) {
+                    nameCz = s;
+                } else if (!code || code === '---') {
+                    if (s.length <= 15) code = s;
+                }
+            });
+        }
+
+        let mainName = (nameUa && nameUa !== 'undefined' && nameUa !== 'nan') ? nameUa : nameCz;
+
+        if (mainName && !mainName.toUpperCase().includes('NÁZEV') && !mainName.toUpperCase().includes('TOTAL') && !mainName.toUpperCase().includes('ИТОГО') && !mainName.toUpperCase().includes('РАЗОМ')) {
+            newItems.push({
+                id: idx + 1,
+                name: mainName,
+                cz: nameCz !== mainName ? nameCz : '',
+                code: code || '---',
+                quality: quality || 'A',
+                plan: plan,
+                done: false,
+                fact: plan,
+                note: ''
+            });
+        }
+    });
+
+    return newItems;
+}
+
+function processWorkbook(workbook, sourceName) {
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const jsonRows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+
+    const parsed = parseRowsToItems(jsonRows);
+
+    if (parsed.length > 0) {
+        items = parsed;
+        saveState();
+        renderCards();
+        showAlert(`✅ Онлайн-форму успішно сформовано на основі таблиці "${sourceName}"! Створено ${parsed.length} карток товарів.`);
+    } else {
+        showAlert("❌ Не вдалося розпізнати рядки товарів у файлі. Перевірте вміст таблиці.", true);
+    }
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            processWorkbook(workbook, file.name);
+        } catch (err) {
+            const reader2 = new FileReader();
+            reader2.onload = function(evt2) {
+                try {
+                    const wb = XLSX.read(evt2.target.result, {type: 'binary'});
+                    processWorkbook(wb, file.name);
+                } catch(err2) {
+                    showAlert("❌ Помилка при читанні файла Excel: " + err2.message, true);
+                }
+            };
+            reader2.readAsBinaryString(file);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+}
+
+function importGoogleSheets() {
+    const url = prompt("Вставте публічне посилання на Google Таблицю (із відкритим доступом):");
+    if (!url) return;
+
+    const matches = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!matches || !matches[1]) {
+        showAlert("❌ Невірний формат посилання Google Таблиці.", true);
+        return;
+    }
+
+    const docId = matches[1];
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
+
+    fetch(csvUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("Переконайтеся, що в Google Таблиці увімкнено доступ 'Усі, хто має посилання'");
+            return res.text();
+        })
+        .then(csvText => {
+            const workbook = XLSX.read(csvText, {type: 'string'});
+            processWorkbook(workbook, "Google Таблиці");
+        })
+        .catch(err => showAlert("❌ Помилка завантаження Google Таблиці: " + err.message, true));
+}
+
+function exportResult() {
+    const exportData = items.map((item, index) => ({
+        "№": index + 1,
+        "Статус": item.done ? "Завантажено" : "В очікуванні",
+        "Назва товару": item.name,
+        "Назва (CZ)": item.cz || "",
+        "Код товару": item.code,
+        "Сорт / Якість": item.quality,
+        "План (кг)": item.plan,
+        "Факт завантажено (кг)": item.done ? item.fact : 0,
+        "Різниця (кг)": item.done ? (item.fact - item.plan) : -item.plan,
+        "№ Пачки / Примітки": item.note || ""
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Завантаження_Підсумок");
+    XLSX.writeFile(workbook, "Підсумкова_Таблиця_Завантаження.xlsx");
+}
+
+function resetForm() {
+    if (confirm("Скинути всі відмітки та завантажений шаблон до початкового?")) {
+        items = defaultItems.map(i => ({ ...i, done: false, fact: i.plan, note: '' }));
+        saveState();
+        renderCards();
+    }
+}
+
+renderCards();
+</script>
+</body>
+</html>
