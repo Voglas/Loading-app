@@ -252,7 +252,7 @@ const defaultItems = [
   {"id": 16, "name": "Зимові жилети (A+B)", "cz": "Vesty zimní", "code": "VESTS W", "quality": "A+B", "plan": 100}
 ];
 
-let items = JSON.parse(localStorage.getItem('app_items_v8')) || defaultItems.map(i => ({
+let items = JSON.parse(localStorage.getItem('app_items_v9')) || defaultItems.map(i => ({
     ...i, done: false, formula: String(i.plan), note: ''
 }));
 
@@ -272,7 +272,7 @@ function parseFormula(expr) {
 }
 
 function saveState() {
-    localStorage.setItem('app_items_v8', JSON.stringify(items));
+    localStorage.setItem('app_items_v9', JSON.stringify(items));
     updateStats();
 }
 
@@ -364,7 +364,7 @@ function addNewPosition() {
         code: val,
         quality: "",
         plan: 0,
-        done: false,
+        done: true, // За замовчуванням додаємо нову позицію як відмічену
         formula: "",
         note: ""
     });
@@ -539,13 +539,21 @@ function importGoogleSheets() {
 }
 
 function exportResult() {
+    // Фільтруємо лише відмічені галочкою позиції (item.done === true)
+    const activeItems = items.filter(item => item.done);
+
+    if (activeItems.length === 0) {
+        showAlert("❌ Не відмічено жодної позиції для експорту!", true);
+        return;
+    }
+
     let totalQtySum = 0;
     let totalWeightSum = 0;
 
-    const exportData = items.map((item, index) => {
+    const exportData = activeItems.map((item, index) => {
         const parsed = parseFormula(item.formula);
-        const factWeight = item.done ? parsed.total : 0;
-        const packagesCount = item.done ? parsed.count : 0;
+        const factWeight = parsed.total;
+        const packagesCount = parsed.count;
 
         totalQtySum += packagesCount;
         totalWeightSum += factWeight;
@@ -555,13 +563,13 @@ function exportResult() {
         return {
             "№": index + 1,
             "код+сорт": codeQualityStr,
-            "введено": item.done ? item.formula : "",
+            "введено": item.formula || "",
             "кількість": packagesCount,
             "вага": factWeight
         };
     });
 
-    // Додаємо підсумковий рядок із сумами
+    // Підсумковий рядок
     exportData.push({
         "№": "",
         "код+сорт": "ВСЬОГО / РАЗОМ",
@@ -571,6 +579,27 @@ function exportResult() {
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Автоматично вираховуємо ширину колонок по вмісту
+    const colWidths = [
+        { wch: 5 },  // №
+        { wch: 20 }, // код+сорт
+        { wch: 25 }, // введено
+        { wch: 12 }, // кількість
+        { wch: 12 }  // вага
+    ];
+
+    exportData.forEach(row => {
+        if (row["код+сорт"] && row["код+сорт"].length + 3 > colWidths[1].wch) {
+            colWidths[1].wch = row["код+сорт"].length + 3;
+        }
+        if (row["введено"] && String(row["введено"]).length + 3 > colWidths[2].wch) {
+            colWidths[2].wch = String(row["введено"]).length + 3;
+        }
+    });
+
+    worksheet['!cols'] = colWidths;
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Завантаження_Підсумок");
     XLSX.writeFile(workbook, "Підсумкова_Таблиця_Завантаження.xlsx");
