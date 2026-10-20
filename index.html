@@ -135,6 +135,43 @@
             font-size: 14px; box-sizing: border-box; background: #fff;
         }
 
+        .add-position-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 20px;
+            border: 1px dashed var(--primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .add-position-title {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--primary);
+        }
+        .add-position-row {
+            display: flex;
+            gap: 8px;
+        }
+        .add-position-input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 14px;
+        }
+        .btn-add-pos {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
         .footer-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff;
             padding: 10px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px;
@@ -182,6 +219,14 @@
 
 <div id="cardsList"></div>
 
+<div class="add-position-card">
+    <div class="add-position-title">➕ Додати позицію вручну</div>
+    <div class="add-position-row">
+        <input type="text" id="newCodeInput" class="add-position-input" placeholder="Код товару (напр. AHM A+B)">
+        <button class="btn-add-pos" onclick="addNewPosition()">Додати позицію</button>
+    </div>
+</div>
+
 <div class="footer-bar">
     <button class="action-btn btn-reset" onclick="resetForm()">Скинути</button>
     <button class="action-btn btn-export" onclick="exportResult()">📥 Завантажити підсумкову Google Таблицю (.xlsx)</button>
@@ -207,7 +252,7 @@ const defaultItems = [
   {"id": 16, "name": "Зимові жилети (A+B)", "cz": "Vesty zimní", "code": "VESTS W", "quality": "A+B", "plan": 100}
 ];
 
-let items = JSON.parse(localStorage.getItem('app_items_v7')) || defaultItems.map(i => ({
+let items = JSON.parse(localStorage.getItem('app_items_v8')) || defaultItems.map(i => ({
     ...i, done: false, formula: String(i.plan), note: ''
 }));
 
@@ -227,7 +272,7 @@ function parseFormula(expr) {
 }
 
 function saveState() {
-    localStorage.setItem('app_items_v7', JSON.stringify(items));
+    localStorage.setItem('app_items_v8', JSON.stringify(items));
     updateStats();
 }
 
@@ -263,7 +308,7 @@ function renderCards(filterText = '') {
     container.innerHTML = '';
 
     items.forEach((item, index) => {
-        const displayTitle = `${item.code || '---'} ${item.quality || 'A'}`.trim();
+        const displayTitle = item.code && item.quality ? `${item.code} ${item.quality}`.trim() : (item.code || item.name || '---');
 
         if (filterText) {
             const q = filterText.toLowerCase();
@@ -285,7 +330,7 @@ function renderCards(filterText = '') {
                 <div class="check-circle" onclick="toggleDone(${index})">✓</div>
             </div>
             <div class="tags-row">
-                <span class="tag-pill">План: ${item.plan} кг</span>
+                ${item.plan ? `<span class="tag-pill">План: ${item.plan} кг</span>` : ''}
                 <span class="tag-pill highlight" id="tag-calc-${index}">Упаковок: ${parsed.count} (Всього: ${parsed.total} кг)</span>
             </div>
             <div class="inputs-row">
@@ -302,6 +347,32 @@ function renderCards(filterText = '') {
         container.appendChild(card);
     });
     updateStats();
+}
+
+function addNewPosition() {
+    const input = document.getElementById('newCodeInput');
+    const val = input.value.trim();
+    if (!val) {
+        showAlert("❌ Введіть код товару!", true);
+        return;
+    }
+
+    items.push({
+        id: items.length + 1,
+        name: val,
+        cz: "",
+        code: val,
+        quality: "",
+        plan: 0,
+        done: false,
+        formula: "",
+        note: ""
+    });
+
+    input.value = "";
+    saveState();
+    renderCards();
+    showAlert(`✅ Позицію "${val}" успішно додано у шаблон!`);
 }
 
 function toggleDone(idx) { items[idx].done = !items[idx].done; saveState(); renderCards(); }
@@ -468,27 +539,35 @@ function importGoogleSheets() {
 }
 
 function exportResult() {
+    let totalQtySum = 0;
+    let totalWeightSum = 0;
+
     const exportData = items.map((item, index) => {
         const parsed = parseFormula(item.formula);
         const factWeight = item.done ? parsed.total : 0;
         const packagesCount = item.done ? parsed.count : 0;
-        const diffWeight = item.done ? (parsed.total - item.plan) : -item.plan;
+
+        totalQtySum += packagesCount;
+        totalWeightSum += factWeight;
+
+        const codeQualityStr = item.code && item.quality ? `${item.code} ${item.quality}`.trim() : (item.code || item.name || '---');
 
         return {
             "№": index + 1,
-            "Статус": item.done ? "Завантажено" : "В очікуванні",
-            "Код + Сорт": `${item.code} ${item.quality}`,
-            "Назва товару": item.name,
-            "Назва (CZ)": item.cz || "",
-            "Код товару": item.code,
-            "Сорт / Якість": item.quality,
-            "План (кг)": item.plan,
-            "Введено по упаковкам (кг)": item.done ? item.formula : "",
-            "Кількість упаковок (шт)": packagesCount,
-            "Факт завантажено (кг)": factWeight,
-            "Різниця (кг)": diffWeight,
-            "№ Пачки / Примітки": item.note || ""
+            "код+сорт": codeQualityStr,
+            "введено": item.done ? item.formula : "",
+            "кількість": packagesCount,
+            "вага": factWeight
         };
+    });
+
+    // Додаємо підсумковий рядок із сумами
+    exportData.push({
+        "№": "",
+        "код+сорт": "ВСЬОГО / РАЗОМ",
+        "введено": "",
+        "кількість": totalQtySum,
+        "вага": totalWeightSum
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
